@@ -14,10 +14,7 @@ class Player8(Player):
 	@staticmethod
 	def get_last_n_subjects(history: list[Item], n: int) -> set[str]:
 		return set(
-			subject
-			for item in history[-n:]
-			if item is not None
-			for subject in item.subjects
+			subject for item in history[-n:] if item is not None for subject in item.subjects
 		)
 
 	def get_fresh_items(self, history: list[Item]) -> list[Item]:
