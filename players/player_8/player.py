@@ -13,7 +13,12 @@ class Player8(Player):
 
 	@staticmethod
 	def get_last_n_subjects(history: list[Item], n: int) -> set[str]:
-		return set(subject for item in history[-n:] for subject in item.subjects)
+		return set(
+			subject
+			for item in history[-n:]
+			if item is not None
+			for subject in item.subjects
+		)
 
 	def get_fresh_items(self, history: list[Item]) -> list[Item]:
 		fresh_items = []
@@ -21,8 +26,8 @@ class Player8(Player):
 		for item in self.memory_bank:
 			for subject in item.subjects:
 				fresh_subject = subject not in prev_subjects
-				used_by_self = item not in self.contributed_items
-				used_by_someone_else = item in history and item not in self.contributed_items
+				used_by_self = item in self.contributed_items
+				used_by_someone_else = item in history and not used_by_self
 				if (
 					fresh_subject
 					and not used_by_someone_else
