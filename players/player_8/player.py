@@ -73,8 +73,12 @@ class Player8(Player):
 			return most_important_fresh_item
 
 		on_subject_items = self.get_on_subject_items(history)
+
+		if(on_subject_items is None):
+			return self.get_most_important_item(self.memory_bank)
+
 		most_important_on_subject_item = max(
 			on_subject_items, key=lambda item: item.importance, default=None
-		)
+		)			
 
 		return most_important_on_subject_item
