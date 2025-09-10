@@ -19,9 +19,9 @@ class Player8(Player):
 	def get_fresh_items(self, history: list[Item]) -> list[Item]:
 		fresh_items = []
 		prev_subjects = self.get_last_n_subjects(history, 5)
-		for subject in prev_subjects:
-			for item in self.memory_bank:
-				fresh_subject = subject in item.subjects
+		for item in self.memory_bank:
+			for subject in item.subjects:
+				fresh_subject = subject not in prev_subjects
 				used_by_self = item not in self.contributed_items
 				used_by_someone_else = item in history and item not in self.contributed_items
 				if fresh_subject and not used_by_someone_else and not used_by_self and item not in fresh_items:
@@ -38,12 +38,11 @@ class Player8(Player):
 		context_subjects = self.get_last_n_subjects(history, 3)
 		on_subject_items = []
 
-		for subject in context_subjects:
-			for item in self.memory_bank:
-				
+		for item in self.memory_bank:
+			for subject in item.subjects:
 				used_by_self = item not in self.contributed_items
 				used_by_someone_else = item in history and item not in self.contributed_items
-				item_has_current_subject = subject in item.subjects
+				item_has_current_subject = subject in context_subjects
 
 				if not used_by_someone_else and not used_by_self and item_has_current_subject and item not in on_subject_items:
 					on_subject_items.append(item)
@@ -51,7 +50,7 @@ class Player8(Player):
 
 	"""
 	Propose an item based on the conversation history.
-		If the last round was a pause, propose a fresh item related to recent subjects. -> Maximize Freshness, Importance while minimizing Repetition.
+		If the last round was a pause, propose a fresh item unrelated to recent subjects. -> Maximize Freshness, Importance while minimizing Repetition.
 		Otherwise, propose the most important item related to the last 3  subjects. - > Maximize Coherence, Importance while minimizing Repetition.
 
 		Scope to improve:
