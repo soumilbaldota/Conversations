@@ -7,9 +7,7 @@ class Player8(Player):
 
 	@staticmethod
 	def was_last_round_pause(history: list[Item]) -> bool:
-		if len(history) >= 1 and history[-1] == None:
-			return True
-		return False
+		return len(history) >= 1 and history[-1] is None
 
 	@staticmethod
 	def get_last_n_subjects(history: list[Item], n: int) -> set[str]:
