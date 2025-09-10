@@ -2,16 +2,15 @@ from models.player import Item, Player, PlayerSnapshot
 
 
 class Player8(Player):
-
 	def __init__(self, snapshot: PlayerSnapshot, conversation_length: int) -> None:  # noqa: F821
 		super().__init__(snapshot, conversation_length)
 
 	@staticmethod
 	def was_last_round_pause(history: list[Item]) -> bool:
-		if(len(history) >= 1 and history[-1] == None):
+		if len(history) >= 1 and history[-1] == None:
 			return True
 		return False
-	
+
 	@staticmethod
 	def get_last_n_subjects(history: list[Item], n: int) -> set[str]:
 		return set(subject for item in history[-n:] for subject in item.subjects)
@@ -24,7 +23,12 @@ class Player8(Player):
 				fresh_subject = subject not in prev_subjects
 				used_by_self = item not in self.contributed_items
 				used_by_someone_else = item in history and item not in self.contributed_items
-				if fresh_subject and not used_by_someone_else and not used_by_self and item not in fresh_items:
+				if (
+					fresh_subject
+					and not used_by_someone_else
+					and not used_by_self
+					and item not in fresh_items
+				):
 					fresh_items.append(item)
 		return fresh_items
 
@@ -32,7 +36,6 @@ class Player8(Player):
 		if not items:
 			return None
 		return max(items, key=lambda item: item.importance)
-	
 
 	def get_on_subject_items(self, history: list[Item]) -> list[Item]:
 		context_subjects = self.get_last_n_subjects(history, 3)
@@ -44,7 +47,12 @@ class Player8(Player):
 				used_by_someone_else = item in history and item not in self.contributed_items
 				item_has_current_subject = subject in context_subjects
 
-				if not used_by_someone_else and not used_by_self and item_has_current_subject and item not in on_subject_items:
+				if (
+					not used_by_someone_else
+					and not used_by_self
+					and item_has_current_subject
+					and item not in on_subject_items
+				):
 					on_subject_items.append(item)
 		return on_subject_items
 
@@ -57,14 +65,16 @@ class Player8(Player):
 			- know when to pause.
 			- handle edge cases better (e.g., no fresh items available).
 	"""
-	def propose_item(self, history: list[Item]) -> Item | None:
 
+	def propose_item(self, history: list[Item]) -> Item | None:
 		if self.was_last_round_pause(history):
 			fresh_items = self.get_fresh_items(history)
 			most_important_fresh_item = self.get_most_important_item(fresh_items)
 			return most_important_fresh_item
 
 		on_subject_items = self.get_on_subject_items(history)
-		most_important_on_subject_item = max(on_subject_items, key=lambda item: item.importance, default=None)
+		most_important_on_subject_item = max(
+			on_subject_items, key=lambda item: item.importance, default=None
+		)
 
 		return most_important_on_subject_item
