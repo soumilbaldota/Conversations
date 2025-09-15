@@ -1,9 +1,8 @@
 from models.player import Item, Player, PlayerSnapshot
 
+
 class Player8(Player):
-	def __init__(
-		self, snapshot: PlayerSnapshot, conversation_length: int
-	) -> None:
+	def __init__(self, snapshot: PlayerSnapshot, conversation_length: int) -> None:
 		super().__init__(snapshot, conversation_length)
 
 	@staticmethod
@@ -13,17 +12,13 @@ class Player8(Player):
 	@staticmethod
 	def get_last_n_subjects(history: list[Item], n: int) -> set[int]:
 		return set(
-			subject
-			for item in history[-n:]
-			if item is not None
-			for subject in item.subjects
+			subject for item in history[-n:] if item is not None for subject in item.subjects
 		)
-	
+
 	@staticmethod
 	def subjects_from_items(items: list[Item]) -> set[int]:
 		return {subject for item in items if item is not None for subject in item.subjects}
 
-	
 	@staticmethod
 	def filter_unused(items: list[Item], history: list[Item]) -> list[Item]:
 		return [item for item in items if item not in history]
@@ -58,7 +53,6 @@ class Player8(Player):
 		monotonic_subjects = list(sub1 & sub2)
 		return monotonic_subjects
 
-
 	def get_on_subject_items(
 		self, items: list[Item], history: list[Item], monotonic_subjects: list[int]
 	) -> list[Item]:
@@ -67,7 +61,6 @@ class Player8(Player):
 
 		for item in items:
 			for subject in item.subjects:
-
 				item_has_current_subject = subject in context_subjects
 				item_is_monotonic = subject in monotonic_subjects
 
@@ -87,7 +80,9 @@ class Player8(Player):
 		for item in self.memory_bank:
 			if not item.subjects:
 				continue
-			avg_bonus = sum(1 - (self.preferences[s] / S) for s in item.subjects) / len(item.subjects)
+			avg_bonus = sum(1 - (self.preferences[s] / S) for s in item.subjects) / len(
+				item.subjects
+			)
 			ranked_items.append((avg_bonus, item))
 
 		ranked_items.sort(reverse=True, key=lambda x: x[0])
@@ -110,22 +105,19 @@ class Player8(Player):
 			lambda: self.get_most_important_item(
 				self.get_on_subject_items(unused_items, history, monotonic_subjects)
 			),
-
 			# 2. Fresh item after pause
 			lambda: self.get_most_important_item(self.get_fresh_items(history))
-			if self.was_last_round_pause(history) else None,
-
+			if self.was_last_round_pause(history)
+			else None,
 			# 3. Fresh preferred
 			lambda: self.get_first_unused_item(
 				self.filter_monotonic_items(monotonic_subjects, preferred_item_order),
 				history,
 			),
-
 			# 4. Most important unused
 			lambda: self.get_most_important_item(
 				self.filter_monotonic_items(monotonic_subjects, unused_items)
 			),
-
 			# 5. Most important overall
 			lambda: self.get_most_important_item(
 				self.filter_monotonic_items(monotonic_subjects, self.memory_bank)
