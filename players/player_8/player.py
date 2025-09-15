@@ -4,7 +4,6 @@ from models.player import GameContext, Item, Player, PlayerSnapshot
 class Player8(Player):
 	def __init__(self, snapshot: PlayerSnapshot, ctx: GameContext) -> None:  # noqa: F821
 		super().__init__(snapshot, ctx)
-		self.ID_dict = dict()
 
 	@staticmethod
 	def was_last_round_pause(history: list[Item]) -> bool:
