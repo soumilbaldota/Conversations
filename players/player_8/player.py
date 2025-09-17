@@ -129,3 +129,28 @@ class Player8(Player):
 			if item is not None:
 				return item
 		return None
+
+	# Know when to pause while communicationg
+
+def is_bad_move(self, item: Item, history: list[Item]) -> bool:
+	
+    # Would this cause an awkward situation while communicating?
+    if not item or item in history:
+        return True
+
+    # We should not repeat the same topic while communicating
+    if len(history) >= 2:
+        last_topics = []
+        for h in history[-2:]:
+            if h is not None:
+                last_topics.extend(h.subjects)
+        if any(last_topics.count(s) >= 2 for s in item.subjects):
+            return True
+
+    # Don't need to go off topic
+    if history:
+        recent_topics = self.get_last_n_subjects(history, 3)
+        if recent_topics and not any(s in recent_topics for s in item.subjects):
+            return True
+
+    return False
