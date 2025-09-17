@@ -95,7 +95,7 @@ class Player8(Player):
 	@staticmethod
 	def filter_monotonic_items(subjects: list[int], items: list[Item]) -> list[Item]:
 		return [item for item in items if not (set(subjects) & set(item.subjects))]
-		
+
 	def compute_item_bonus(self, item: Item, history: list[Item]) -> float:
 		bonus = 0.0
 		S = len(self.preferences)
@@ -103,8 +103,12 @@ class Player8(Player):
 
 		if len(history) >= 3:
 			last_three_items = history[-3:]  # last 3 items in order
-			last_three_subjects_sets = [self.subjects_from_items([item]) for item in last_three_items]
-			monotonic_subjects = set.intersection(*last_three_subjects_sets)  # subjects repeated in all 3
+			last_three_subjects_sets = [
+				self.subjects_from_items([item]) for item in last_three_items
+			]
+			monotonic_subjects = set.intersection(
+				*last_three_subjects_sets
+			)  # subjects repeated in all 3
 
 		if not item:
 			return bonus
@@ -128,7 +132,6 @@ class Player8(Player):
 			if subject in monotonic_subjects:
 				bonus -= 3
 
-
 		# 5. Non-repetition
 		if item in history:
 			bonus -= 1.0
@@ -142,7 +145,7 @@ class Player8(Player):
 
 		# Only consider non-monotonic subjects for coherence
 		coherent_subjects = set(item.subjects) & (context_subjects - monotonic_subjects)
-		
+
 		if len(coherent_subjects) == len(item.subjects):
 			# Fully coherent
 			bonus += 1.0
@@ -154,8 +157,6 @@ class Player8(Player):
 			bonus -= 3
 
 		return bonus
-
-
 
 	def propose_item(self, history: list[Item]) -> Item | None:
 		unused_items = self.filter_unused(self.memory_bank, history)
@@ -186,7 +187,6 @@ class Player8(Player):
 			),
 		]
 
-					
 		# Evaluate candidates and compute their bonuses once
 		evaluated_items = [
 			(item, self.compute_item_bonus(item, history))
