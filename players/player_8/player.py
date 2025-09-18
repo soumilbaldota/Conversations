@@ -137,7 +137,7 @@ class Player8(Player):
 			if not self.was_last_round_pause(history):
 				return 0
 			recent_subjects = self.get_last_n_subjects(history, 6)
-			return sum(1 for s in item.subjects if s not in recent_subjects)/2
+			return sum(1 for s in item.subjects if s not in recent_subjects)
 
 		def coherence_bonus(item: Item, history: list[Item]) -> float:
 			if not item or item in history:
