@@ -1,150 +1,42 @@
 from collections import Counter
+import numpy as np
 from models.player import GameContext, Item, Player, PlayerSnapshot
-import statistics
+from players.player_8.player_base import Player8Base
 
-class Player8(Player):
-	def __init__(self, snapshot: PlayerSnapshot, ctx: GameContext) -> None:  # noqa: F821
-		super().__init__(snapshot, ctx)
 
-	@staticmethod
-	def was_last_round_pause(history: list[Item]) -> bool:
-		return len(history) >= 1 and history[-1] is None
-
-	@staticmethod
-	def get_last_n_subjects(history: list[Item], n: int) -> set[int]:
-		return set(
-			subject for item in history[-n:] if item is not None for subject in item.subjects
-		)
-
-	@staticmethod
-	def subjects_from_items(items: list[Item]) -> set[int]:
-		return [subject for item in items if item is not None for subject in item.subjects]
-
-	@staticmethod
-	def filter_unused(items: list[Item], history: list[Item]) -> list[Item]:
-		return [item for item in items if item not in history]
-
-	def get_fresh_items(self, history: list[Item]) -> list[Item]:
-		fresh_items = []
-		prev_subjects = self.get_last_n_subjects(history, 5)
-		for item in self.memory_bank:
-			for subject in item.subjects:
-				fresh_subject = subject not in prev_subjects
-				used = item in history
-				if fresh_subject and not used and item not in fresh_items:
-					fresh_items.append(item)
-		return fresh_items
-
-	def get_most_important_item(self, items: list[Item]) -> Item | None:
-		if not items:
-			return None
-		return max(items, key=lambda item: item.importance)
-
-	"""
-		These subjects have already appeared thrice before and are best to avoid, on the current try
-	"""
-	def monotonic_subjects(self, history: list[Item]) -> list[int]:
-		sub1, sub2, sub3 = set(), set(), set()
-		monotonic_subjects = []
-
-		if len(history) >= 3:
-			counter = Counter(self.subjects_from_items(history[-3:]))
-			for x, y in counter.items():
-				if y > 2:
-					monotonic_subjects.append(x)
-		return monotonic_subjects
-	
-
-	@staticmethod
-	def coherence_score(item: Item, context_subjects: list[Item]):
-		coherence_score = 0.0
-		for subject in item.subjects:
-				item_has_current_subject = subject in context_subjects
-				if item_has_current_subject:
-					coherence_score += 1
-		return coherence_score
-	
-	def current_context(self, history: list[Item]):
-		context_subjects: list[int] = []
-		for i in range(-1, -3, -1):
-			if len(history) >= -i and history[i]:
-				for subject in history[i].subjects:
-					context_subjects.append(subject)
-			else:
-				break
-
-		return context_subjects
-
-	def coherent_items(self, items: list[Item], history: list[Item]) -> list[Item]:
-		if not history:
-			return items
-		context_subjects = self.current_context(history)
-		coherent_items = []
-
-		for item in items:
-			if self.coherence_score(item, context_subjects) > 0:
-				coherent_items.append(item)
-
-		return coherent_items
-
-	def preference_score(self, item: Item):
-		return sum(1 - (self.preferences[s] / len(self.preferences)) for s in item.subjects) / len(
-						item.subjects
-					)
-
-	def get_preferred_item_order(self) -> list[Item]:
-		S = len(self.preferences)
-
-		ranked_items = []
-		for item in self.memory_bank:
-
-			if not item.subjects:
-				continue
-
-			avg_bonus = self.preference_score(item)
-			if avg_bonus > 0.5:
-				ranked_items.append((avg_bonus, item))
-
-		ranked_items.sort(reverse=True, key=lambda x: x[0])
-		return [item for _, item in ranked_items]
-
-	def get_first_unused_item(self, items: list[Item], history: list[Item]) -> Item | None:
-		return next(iter(self.filter_unused(items, history)), None)
-
-	@staticmethod
-	def filter_monotonic_items(monotonic_subjects: list[int], items: list[Item]) -> list[Item]:
-		return [item for item in items if not len(set(monotonic_subjects) & set(item.subjects))]
-
+class Player8(Player8Base):
 	def compute_bonuses(
 		self,
 		item: Item,
 		history: list[Item],
-		monotonic_subjects: list[int]
+		monotonic_subjects: list[int],
 	) -> list[float]:
-
 		def repetition_bonus(item: Item, history: list[Item]) -> float:
 			return -1 if item and item in history else 0
-
-		def importance_bonus(item: Item, history: list[Item]) -> float:
-			return item.importance if item and item not in history else 0
 
 		def preference_bonus(item: Item, history: list[Item]) -> float:
 			return self.preference_score(item) if item and item not in history else 0
 
+		def importance_bonus(item: Item, history: list[Item]) -> float:
+			return item.importance if item and item not in history else 0
+
 		def freshness_bonus(item: Item, history: list[Item]) -> float:
-			if not item: # pauses contribute to the freshness score
-				return 1
+			if not item:  # pauses contribute to the freshness score
+				return 2
 			if not self.was_last_round_pause(history):
 				return 0
 			recent_subjects = self.get_last_n_subjects(history, 6)
-			return sum(1 for s in item.subjects if s not in recent_subjects)
+			return sum(1 for s in item.subjects if s not in recent_subjects) / 2
+
+		def pause_bonus(item: Item) -> float:
+			return 1 if item is None else 0
 
 		def coherence_bonus(item: Item, history: list[Item]) -> float:
 			if not item or item in history:
 				return 0
 			context_subjects = set(self.current_context(history))
 			overlap = set(item.subjects) & context_subjects
-			return self.coherence_score(item, overlap)/2
+			return self.coherence_score(item, overlap)
 
 		def monotonic_bonus(item: Item, monotonic_subjects: list[int]) -> float:
 			if not item:
@@ -159,51 +51,72 @@ class Player8(Player):
 			repetition_bonus(item, history),
 			importance_bonus(item, history),
 			preference_bonus(item, history),
+			pause_bonus(item),
 		]
 
-	def propose_item(self, history: list[Item]) -> Item | None:
-		unused_items = self.filter_unused(self.memory_bank, history)
-		preferred_item_order = self.get_preferred_item_order()
-		monotonic_subjects = self.monotonic_subjects(history)
-		coherent_items = self.coherent_items(unused_items, history)
+	def __init__(self, snapshot: PlayerSnapshot, ctx: GameContext, lr=0.1) -> None:
+		super().__init__(snapshot, ctx)
+		self.lr = lr
+		self.baseline = 0.0
+		# Load weights if available
+		try:
+			self.weights = np.load('./players/player_8/learned_weights.npy')
+			self.intercept = float(np.load('./players/player_8/learned_intercept.npy'))
+		except FileNotFoundError:
+			self.weights = np.zeros(7)  # assuming 6 bonus features
+			self.intercept = 0.0
+		self.last_item = None
+		self.last_history = None
+		self.last_monotonic = None
 
-		candidates = [
-			# 1. Most important on-subject
-			lambda: self.get_most_important_item(
-				self.filter_monotonic_items(monotonic_subjects, coherent_items)
-			),
-			# 2. Fresh item after pause
-			lambda: self.get_most_important_item(self.get_fresh_items(history))
-			if self.was_last_round_pause(history)
-			else None,
-			# 3. Fresh preferred
-			lambda: self.get_first_unused_item(
-				self.filter_monotonic_items(monotonic_subjects, preferred_item_order),
-				history,
-			),
-			# 4. Most important unused
-			lambda: self.get_most_important_item(
-				self.filter_monotonic_items(monotonic_subjects, unused_items)
+	def select_item(self, items, history, monotonic):
+		"""Sample item using softmax over weighted bonuses."""
+
+		scores = np.array(
+			[
+				np.dot(self.weights, self.compute_bonuses(item, history, monotonic))
+				for item in items
+			],
+			dtype=np.float32,
+		)
+
+		if scores.shape[0] != len(items):
+			raise ValueError(
+				f'scores length {scores.shape[0]} does not match items length {len(items)}'
 			)
-		]
 
-		# Evaluate candidates and compute their bonuses once
-		# evaluated_items = [
-		# 	(item, self.compute_item_bonus(item, history, monotonic_subjects))
-		# 	for candidate in candidates
-		# 	if (item := candidate()) is not None
-		# ]
+		# softmax safely
+		exp_scores = np.exp(scores - np.max(scores))
+		probs = exp_scores / np.sum(exp_scores)
 
-		evaluated_items = [
-			(item, statistics.mean(self.compute_bonuses(item, history, monotonic_subjects)))
-			for candidate in self.memory_bank
-			if (item := candidate) is not None
-		]
+		choice_idx = np.random.choice(len(items), p=probs)
+		self.last_item = items[choice_idx]
+		self.last_history = list(history)  # copy
+		self.last_monotonic = list(monotonic)
+		return self.last_item
 
-		if not evaluated_items:
-			return None
+	def update(self, reward):
+		"""REINFORCE update using last chosen item."""
+		if self.last_item is None:
+			return
+		grad_log = self.compute_bonuses(
+			self.last_item, self.last_history, self.last_monotonic
+		)
+		self.weights += self.lr * (reward - self.baseline) * np.array(grad_log)
+		self.intercept += self.lr * (reward - self.baseline)
+		self.baseline = 0.9 * self.baseline + 0.1 * reward
 
-		# Pick the candidate with the highest bonus
-		best_item, best_bonus = max(evaluated_items, key=lambda x: x[1])
-
-		return best_item if best_bonus >= 0 else None
+	def propose_item(self, history):
+		# Step 1: check if we have a last item to reward
+		if len(history) > 0 and history[-1] is not None and history[-1].player_id == self.id:
+			reward = self.compute_item_bonus(history[-1], history[:-1], self.monotonic_subjects(history[:-1]))
+			self.update(reward)
+		
+		# Step 2: determine monotonic subjects and candidates
+		monotonic_subjects = self.monotonic_subjects(history)
+		candidates = list(self.memory_bank) + [None]  # include pause
+		# Step 3: propose next item
+		if len(history) % 100 == 0:
+			np.save("./players/player_8/learned_weights.npy", self.weights)
+			np.save("./players/player_8/learned_intercept.npy", self.intercept)
+		return self.select_item(candidates, history, monotonic_subjects)

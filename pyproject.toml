@@ -8,6 +8,9 @@ dependencies = [
     "pygame>=2.6.1",
     "openai",
     "ruff>=0.12.8",
+    "torch>=2.8.0",
+    "numpy>=2.3.3",
+    "scikit-learn>=1.7.2",
 ]
 
 [tool.ruff]
