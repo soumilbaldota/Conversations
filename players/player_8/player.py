@@ -1,6 +1,6 @@
 from collections import Counter
 from models.player import GameContext, Item, Player, PlayerSnapshot
-
+import statistics
 
 class Player8(Player):
 	def __init__(self, snapshot: PlayerSnapshot, ctx: GameContext) -> None:  # noqa: F821
@@ -115,33 +115,51 @@ class Player8(Player):
 	def filter_monotonic_items(monotonic_subjects: list[int], items: list[Item]) -> list[Item]:
 		return [item for item in items if not len(set(monotonic_subjects) & set(item.subjects))]
 
-	def compute_item_bonus(self, item: Item, history: list[Item], monotonic_subjects: list[int]) -> float:
-		bonus = 0.0
-		
-		if not item:
-			return 1
+	def compute_bonuses(
+		self,
+		item: Item,
+		history: list[Item],
+		monotonic_subjects: list[int]
+	) -> list[float]:
 
-		if self.was_last_round_pause(history):
-			prev_subjects = self.get_last_n_subjects(history, 6)
-			for subject in item.subjects:
-				if subject not in prev_subjects:
-					bonus += 1
+		def repetition_bonus(item: Item, history: list[Item]) -> float:
+			return -1 if item and item in history else 0
 
-		for subject in item.subjects:
-			if subject in monotonic_subjects:
-				bonus -= 1
-				break
+		def importance_bonus(item: Item, history: list[Item]) -> float:
+			return item.importance if item and item not in history else 0
 
-		if item in history:
-			bonus -= 1
+		def preference_bonus(item: Item, history: list[Item]) -> float:
+			return self.preference_score(item) if item and item not in history else 0
 
-		context_window = self.current_context(history)
-		coherent_subjects = set(item.subjects) & set(context_window)
+		def freshness_bonus(item: Item, history: list[Item]) -> float:
+			if not item: # pauses contribute to the freshness score
+				return 1
+			if not self.was_last_round_pause(history):
+				return 0
+			recent_subjects = self.get_last_n_subjects(history, 6)
+			return sum(1 for s in item.subjects if s not in recent_subjects)/2
 
-		if not coherent_subjects:
-			bonus -= 2
+		def coherence_bonus(item: Item, history: list[Item]) -> float:
+			if not item or item in history:
+				return 0
+			context_subjects = set(self.current_context(history))
+			overlap = set(item.subjects) & context_subjects
+			return self.coherence_score(item, overlap)/2
 
-		return bonus
+		def monotonic_bonus(item: Item, monotonic_subjects: list[int]) -> float:
+			if not item:
+				return 0
+			return sum(-1 for s in item.subjects if s in monotonic_subjects)
+
+		# Collect all bonuses
+		return [
+			freshness_bonus(item, history),
+			coherence_bonus(item, history),
+			monotonic_bonus(item, monotonic_subjects),
+			repetition_bonus(item, history),
+			importance_bonus(item, history),
+			preference_bonus(item, history),
+		]
 
 	def propose_item(self, history: list[Item]) -> Item | None:
 		unused_items = self.filter_unused(self.memory_bank, history)
@@ -177,7 +195,7 @@ class Player8(Player):
 		# ]
 
 		evaluated_items = [
-			(item, self.compute_item_bonus(item, history, monotonic_subjects))
+			(item, statistics.mean(self.compute_bonuses(item, history, monotonic_subjects)))
 			for candidate in self.memory_bank
 			if (item := candidate) is not None
 		]
@@ -187,5 +205,5 @@ class Player8(Player):
 
 		# Pick the candidate with the highest bonus
 		best_item, best_bonus = max(evaluated_items, key=lambda x: x[1])
-		
+
 		return best_item if best_bonus >= 0 else None
