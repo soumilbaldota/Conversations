@@ -1,5 +1,4 @@
 from collections import Counter
-import sys
 from uuid import UUID
 from models.player import GameContext, Item, Player, PlayerSnapshot
 
@@ -15,7 +14,6 @@ v = [
 
 class Player8(Player):
 	def __init__(self, snapshot: PlayerSnapshot, ctx: GameContext) -> None:  # noqa: F821
-		snapshot.item_in_memory_bank
 		super().__init__(snapshot, ctx)
 
 	@staticmethod
