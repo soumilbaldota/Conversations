@@ -2,8 +2,9 @@ from collections import Counter
 import sys
 from uuid import UUID
 from models.player import GameContext, Item, Player, PlayerSnapshot
-
-v = [3.509549936829426, 3.6661804644288427, 2.657774084696876, 4.354161981052706, 2.4502569274937183, -1.386507441304629]
+import os
+import json
+v = json.loads(os.environ["PLAYER8_V"])
 
 class Player8(Player):
 	def __init__(self, snapshot: PlayerSnapshot, ctx: GameContext) -> None:  # noqa: F821
