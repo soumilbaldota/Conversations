@@ -1,6 +1,8 @@
-from models.player import GameContext, Item, Player, PlayerSnapshot
 from collections import Counter
 from uuid import UUID
+
+from models.item import Item
+from models.player import GameContext, Player, PlayerSnapshot
 
 v = [
 	3.509549936829426,
@@ -8,7 +10,7 @@ v = [
 	2.657774084696876,
 	4.354161981052706,
 	2.4502569274937183,
-	0,
+	-1.386507441304629,
 ]
 
 
