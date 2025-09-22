@@ -1,13 +1,18 @@
-import subprocess, json, numpy as np, optuna
 import os
-from sklearn.linear_model import LinearRegression
-import pickle
-
+import json
+import numpy as np
+import subprocess
+from itertools import product
+import os
+import json
+import numpy as np
+import subprocess
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 # ----------------------------
 # Simulation runner
 # ----------------------------
-def run_simulation(length=100, player='p8', memory_size=None, seed=None, env=None):
+def run_simulation(length=100, player='p8', memory_size=None, seed=None, env=None, num_players=10):
     if memory_size is None:
         memory_size = length // 10  # fallback
 
@@ -22,110 +27,189 @@ def run_simulation(length=100, player='p8', memory_size=None, seed=None, env=Non
         str(memory_size),
         '--player',
         player,
-        '10',  # fixed player count
+        str(num_players),  # use the argument here
     ]
     if seed is not None:
         cmd += ['--seed', str(seed)]
 
     result = subprocess.run(cmd, capture_output=True, text=True, cwd='.', env=env)
-    # print(result.stderr)
     data = json.loads(result.stdout[result.stdout.index('{'):])
     return data
 
 
 # ----------------------------
-# Evaluate given v vector
+# Worker for a single trial
 # ----------------------------
-def evaluate_v(v, memory_size=10, conv_length=100, trials=20):
-    scores = []
-    for i in range(trials):
-        env = dict(os.environ)
-        env['PLAYER8_V'] = json.dumps(v)
-        sim = run_simulation(
-            length=conv_length,
-            player='p8',
-            memory_size=memory_size,
-            seed=i,
-            env=env,
-        )
-        score = sim['scores']['shared_score_breakdown']['total']
-        scores.append(score)
-        print(f"  Trial {i}: score={score}")  # <--- print each trial score
-    avg = np.mean(scores)
-    print(f"Avg score for v={v}, memory_size={memory_size}, conv_length={conv_length} -> {avg}")
-    return avg
-
-
-# ----------------------------
-# Optuna objective
-# ----------------------------
-def objective(trial):
-    candidate_v = [trial.suggest_uniform(f'v{i}', -5, 5) for i in range(6)]
-    memory_size = trial.suggest_int("memory_size", 1, 100)
-    conv_length = trial.suggest_int("conv_length", 10, 1000)
-
-    # Enforce max constraint
-    max_conv_length = memory_size * 10  # since player count = 10
-    if conv_length > max_conv_length:
-        conv_length = max_conv_length
-
-    avg_score = evaluate_v(
-        candidate_v,
+def evaluate_worker(v, memory_size, conv_length, num_players, seed):
+    env = dict(os.environ)
+    env['PLAYER8_V'] = json.dumps(v.tolist())
+    sim = run_simulation(
+        length=conv_length,
+        player='p8',
         memory_size=memory_size,
-        conv_length=conv_length,
-        trials=200,
+        seed=seed,
+        env=env,
+        num_players=num_players
     )
+    return sim['scores']['shared_score_breakdown']['total']
 
-    print(
-        f"[Optuna] Params: v={candidate_v}, "
-        f"memory_size={memory_size}, conv_length={conv_length} "
-        f"(max allowed={max_conv_length}), score={avg_score}"
-    )
-    return avg_score
 
 # ----------------------------
-# Run optimization indefinitely
+# Evaluate a v vector (parallelized)
 # ----------------------------
-if __name__ == '__main__':
-    study = optuna.create_study(
-        direction='maximize',
-        storage='sqlite:///optuna_player8.db',
-        study_name='player8_v_mem_conv_search',
-        load_if_exists=True,
+def evaluate_v(v, memory_size=10, conv_length=100, trials=20, num_players=10, max_workers=None):
+    scores = []
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+        futures = [
+            executor.submit(evaluate_worker, v, memory_size, conv_length, num_players, i)
+            for i in range(trials)
+        ]
+        for f in as_completed(futures):
+            scores.append(f.result())
+    return np.mean(scores)
+
+def quantize(v, step=0.5, vmin=0, vmax=4):
+    v = np.round(v / step) * step
+    return np.clip(v, vmin, vmax)
+
+# ----------------------------
+# Simulated Annealing optimizer
+# ----------------------------
+def simulated_annealing(
+    initial_v=None,
+    memory_size=10,
+    conv_length=100,
+    trials=20,
+    max_iter=50,
+    initial_temp=10,
+    cooling_rate=0.9,
+    perturb_scale=0.5,
+    num_players=10
+):
+    if initial_v is None:
+        initial_v = np.zeros(6)
+
+    current_v = np.array(initial_v)
+    current_score = evaluate_v(current_v, memory_size, conv_length, trials, num_players)
+    best_v = current_v.copy()
+    best_score = current_score
+    T = initial_temp
+
+    print(f"Initial score: {current_score:.4f}, initial v: {current_v}")
+
+    for iteration in range(max_iter):
+        # Perturb v vector
+        new_v = current_v + np.random.normal(0, perturb_scale, size=current_v.shape)
+        new_score = evaluate_v(new_v, memory_size, conv_length, trials, num_players)
+        new_v = quantize(new_v, step=0.5, vmin=-5, vmax=5)  # <-- quantize & clip
+
+        # Accept new v if better or probabilistically
+        if new_score > current_score or np.random.rand() < np.exp((new_score - current_score) / T):
+            current_v = new_v
+            current_score = new_score
+
+            if new_score > best_score:
+                best_v = new_v
+                best_score = new_score
+
+        # Cool down
+        T *= cooling_rate
+        print(f"Iter {iteration+1}/{max_iter}: current_score={current_score:.4f}, best_score={best_score:.4f}")
+
+    return best_v, best_score
+
+# ----------------------------
+# Large-scale lookup table generation
+# ----------------------------
+def generate_large_v_lookup(
+    memory_sizes,
+    conv_lengths,
+    num_players_list,
+    trials_per_eval=10,
+    max_iter_per_sa=30,
+    initial_temp=1.0,
+    cooling_rate=0.9,
+    perturb_scale=0.5,
+    checkpoint_interval=50,
+    output_file="v_lookup_large.json"
+):
+    if os.path.exists(output_file):
+        with open(output_file, "r") as f:
+            v_lookup = json.load(f)
+    else:
+        v_lookup = {}
+
+    total_combinations = len(memory_sizes) * len(conv_lengths) * len(num_players_list)
+    comb_index = 0
+
+    for mem, conv_len, n_players in product(memory_sizes, conv_lengths, num_players_list):
+        # --- restrict space ---
+        if n_players * mem <= conv_len:
+            continue
+
+        key = f"{mem}_{conv_len}_{n_players}"
+        comb_index += 1
+
+        if key in v_lookup:
+            continue
+
+        # --- try to reuse a neighbor value as starting point ---
+        initial_v = None
+        neighbor_keys = [
+            f"{mem-1}_{conv_len}_{n_players}",
+            f"{mem}_{conv_len-20}_{n_players}",
+            f"{mem}_{conv_len}_{n_players-1}"
+        ]
+        for nk in neighbor_keys:
+            if nk in v_lookup:
+                initial_v = np.array(v_lookup[nk])
+                break
+
+        print(f"[{comb_index}/{total_combinations}] Optimizing v for memory_size={mem}, conv_length={conv_len}, num_players={n_players} (init from {'neighbor' if initial_v is not None else 'zeros'})")
+
+        try:
+            best_v, best_score = simulated_annealing(
+                initial_v=initial_v,
+                memory_size=mem,
+                conv_length=conv_len,
+                trials=trials_per_eval,
+                max_iter=max_iter_per_sa,
+                initial_temp=initial_temp,
+                cooling_rate=cooling_rate,
+                perturb_scale=perturb_scale,
+                num_players=n_players
+            )
+            v_lookup[key] = best_v.tolist()
+            print(f"Done: score={best_score:.4f}, v={best_v}")
+
+        except Exception as e:
+            print(f"Error optimizing {key}: {e}")
+            continue
+
+        if comb_index % checkpoint_interval == 0:
+            with open(output_file, "w") as f:
+                json.dump(v_lookup, f, indent=2)
+            print(f"Checkpoint saved after {comb_index} combinations")
+
+    with open(output_file, "w") as f:
+        json.dump(v_lookup, f, indent=2)
+    print("All combinations processed. Lookup table saved.")
+
+# ----------------------------
+# Example plug-and-play usage
+# ----------------------------
+if __name__ == "__main__":
+    # Large ranges
+    memory_sizes = list(range(10, 100))           # adjust as needed
+    conv_lengths = list(range(10, 300, 20))     # adjust as needed
+    num_players_list = list(range(2, 11))       # adjust as needed
+
+    generate_large_v_lookup(
+        memory_sizes,
+        conv_lengths,
+        num_players_list,
+        trials_per_eval=50,
+        max_iter_per_sa=20,
+        checkpoint_interval=1,
+        initial_temp=10
     )
-
-    try:
-        iteration = 0
-        while True:
-            iteration += 1
-            print(f"\n=== Optimization iteration {iteration} ===")
-            # Run a small batch of trials per iteration
-            study.optimize(objective, n_trials=5)
-
-            # Print current best
-            print(f"Best params so far: {study.best_params}")
-            print(f"Best value so far: {study.best_value}")
-
-            # Optional: update regression model each iteration
-            X, Y = [], []
-            for t in study.trials:
-                if t.value is None:
-                    continue
-                memory_size = t.params["memory_size"]
-                conv_length = t.params["conv_length"]
-                v = [t.params[f'v{i}'] for i in range(6)]
-                X.append([memory_size, conv_length])
-                Y.append(v)
-            if X:
-                model = LinearRegression()
-                model.fit(X, Y)
-                with open("player8_v_model.pkl", "wb") as f:
-                    pickle.dump(model, f)
-
-                default_v = model.predict([[10, 100]])[0].tolist()
-                print("Updated default v:", default_v)
-
-    except KeyboardInterrupt:
-        print("\nOptimization stopped manually.")
-        print(f"Final best params: {study.best_params}")
-        print(f"Final best value: {study.best_value}")
