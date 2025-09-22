@@ -3,7 +3,15 @@ import sys
 from uuid import UUID
 from models.player import GameContext, Item, Player, PlayerSnapshot
 
-v = [3.509549936829426, 3.6661804644288427, 2.657774084696876, 4.354161981052706, 2.4502569274937183, -1.386507441304629]
+v = [
+	3.509549936829426,
+	3.6661804644288427,
+	2.657774084696876,
+	4.354161981052706,
+	2.4502569274937183,
+	-1.386507441304629,
+]
+
 
 class Player8(Player):
 	def __init__(self, snapshot: PlayerSnapshot, ctx: GameContext) -> None:  # noqa: F821
@@ -88,7 +96,7 @@ class Player8(Player):
 			if not item:
 				return 0
 			return sum(-1 for s in item.subjects if s in monotonic_subjects)
-		
+
 		return [
 			freshness_bonus() * v[0],
 			coherence_bonus() * v[1],
