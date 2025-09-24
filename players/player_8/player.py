@@ -1,5 +1,4 @@
 from collections import Counter
-<<<<<<< HEAD
 import math
 from uuid import UUID
 from models.player import GameContext, Item, Player, PlayerSnapshot
@@ -8,21 +7,6 @@ import json
 
 with open('players/player_8/weights', 'r') as f:
 	V_LOOKUP = json.load(f)
-=======
-from uuid import UUID
-
-from models.item import Item
-from models.player import GameContext, Player, PlayerSnapshot
-
-v = [
-	3.509549936829426,
-	3.6661804644288427,
-	2.657774084696876,
-	4.354161981052706,
-	2.4502569274937183,
-	0,
-]
->>>>>>> 72d7249e949980971252acd71c2c5dd5a30ecc40
 
 
 class Player8(Player):
@@ -78,10 +62,7 @@ class Player8(Player):
 
 	@staticmethod
 	def subjects_from_items(items: list[Item]) -> set[int]:
-<<<<<<< HEAD
 		"""Get subjects from items"""
-=======
->>>>>>> 72d7249e949980971252acd71c2c5dd5a30ecc40
 		return [subject for item in items if item is not None for subject in item.subjects]
 
 	@staticmethod
@@ -117,11 +98,7 @@ class Player8(Player):
 
 	@staticmethod
 	def compute_bonuses(
-<<<<<<< HEAD
 		item: Item, history: list[Item], monotonic_subjects: list[int], preferences: list[int], v
-=======
-		item: Item, history: list[Item], monotonic_subjects: list[int], preferences: list[int]
->>>>>>> 72d7249e949980971252acd71c2c5dd5a30ecc40
 	) -> list[float]:
 		if not item:  # pause shortcut
 			return [1, 0, 0, 0, 0, 0]
@@ -151,7 +128,6 @@ class Player8(Player):
 		def monotonic_bonus():
 			if not item:
 				return 0
-<<<<<<< HEAD
 			return sum(-1 for s in item.subjects if s in monotonic_subjects) + (
 				-1 if item in history else 0
 			)
@@ -163,17 +139,6 @@ class Player8(Player):
 			repetition_bonus() * max(0.1, v[3]),
 			importance_bonus() * max(0.1, v[4]),
 			preference_bonus() * max(0.1, v[5]),
-=======
-			return sum(-1 for s in item.subjects if s in monotonic_subjects)
-
-		return [
-			freshness_bonus() * v[0],
-			coherence_bonus() * v[1],
-			monotonic_bonus() * v[2],
-			repetition_bonus() * v[3],
-			importance_bonus() * v[4],
-			preference_bonus() * v[5],
->>>>>>> 72d7249e949980971252acd71c2c5dd5a30ecc40
 		]
 
 	@staticmethod
@@ -199,11 +164,7 @@ class Player8(Player):
 		if len(history) >= 3:
 			counter = Counter(Player8.subjects_from_items(history[-3:]))
 			for x, y in counter.items():
-<<<<<<< HEAD
 				if y >= 3:
-=======
-				if y > 2:
->>>>>>> 72d7249e949980971252acd71c2c5dd5a30ecc40
 					monotonic_subjects.append(x)
 		return monotonic_subjects
 
@@ -222,11 +183,7 @@ class Player8(Player):
 	@staticmethod
 	def current_context(history: list[Item]):
 		context_subjects: list[int] = []
-<<<<<<< HEAD
 		for i in range(-1, -4, -1):
-=======
-		for i in range(-1, -3, -1):
->>>>>>> 72d7249e949980971252acd71c2c5dd5a30ecc40
 			if len(history) >= -i and history[i]:
 				for subject in history[i].subjects:
 					context_subjects.append(subject)
@@ -250,7 +207,6 @@ class Player8(Player):
 		return [item for item in items if not len(set(monotonic_subjects) & set(item.subjects))]
 
 	def propose_item(self, history: list[Item]) -> Item | None:
-<<<<<<< HEAD
 		monotonic_subjects = self.monotonic_subjects(history)
 
 		evaluated_items = [
@@ -262,25 +218,12 @@ class Player8(Player):
 					)
 				),
 			)
-=======
-		if None not in self.memory_bank:
-			self.memory_bank.append(None)
-
-		monotonic_subjects = self.monotonic_subjects(history)
-
-		evaluated_items = [
-			(item, sum(self.compute_bonuses(item, history, monotonic_subjects, self.preferences)))
->>>>>>> 72d7249e949980971252acd71c2c5dd5a30ecc40
 			for candidate in self.memory_bank
 			if (item := candidate) is not None
 		]
 
 		best_item, best_bonus = max(evaluated_items, key=lambda x: x[1])
 
-<<<<<<< HEAD
 		if len(history) == 0:
 			return best_item
 		return best_item if best_bonus > 1 else None
-=======
-		return best_item if best_bonus >= 0 else None
->>>>>>> 72d7249e949980971252acd71c2c5dd5a30ecc40
