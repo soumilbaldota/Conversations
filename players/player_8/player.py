@@ -4,25 +4,59 @@ from uuid import UUID
 from models.player import GameContext, Item, Player, PlayerSnapshot
 import os
 import json
-v = json.loads(os.environ["PLAYER8_V"])
+import numpy as np
+
+with open('players/player_8/weights', 'r') as f:
+	V_LOOKUP = json.load(f)
+
 
 class Player8(Player):
 	def __init__(self, snapshot: PlayerSnapshot, ctx: GameContext) -> None:  # noqa: F821
-		snapshot.item_in_memory_bank
 		super().__init__(snapshot, ctx)
+		self.v = Player8.lookup_v(
+			len(self.memory_bank), ctx.conversation_length, ctx.number_of_players
+		)
+
+	@staticmethod
+	def lookup_v(mem: int, conv_len: int, num_players: int) -> list[float]:
+		"""Return v from lookup (nearest neighbor)."""
+		if not V_LOOKUP:
+			return json.loads(os.environ.get('PLAYER8_V', '[]')) or [
+				3.509549936829426,
+				3.6661804644288427,
+				2.657774084696876,
+				4.354161981052706,
+				2.4502569274937183,
+				-1.386507441304629,
+			]
+
+		target = np.array([mem, conv_len, num_players])
+		best_key, best_dist = None, float('inf')
+
+		for key, vec in V_LOOKUP.items():
+			m, c, n = map(int, key.split('_'))
+			cand = np.array([m, c, n])
+			dist = np.linalg.norm(target - cand)
+			if dist < best_dist:
+				best_dist, best_key = dist, key
+
+		return V_LOOKUP[best_key]
 
 	@staticmethod
 	def was_last_round_pause(history: list[Item]) -> bool:
+		"""Check if last round was a pause"""
 		return len(history) >= 1 and history[-1] is None
 
 	@staticmethod
 	def get_last_n_subjects(history: list[Item], n: int) -> set[int]:
+		"""Get the last N subjects"""
 		return set(
 			subject for item in history[-n:] if item is not None for subject in item.subjects
 		)
 
 	@staticmethod
 	def subjects_from_items(items: list[Item]) -> set[int]:
+		"""Get subjects from items"""
 		return [subject for item in items if item is not None for subject in item.subjects]
 
 	@staticmethod
@@ -58,7 +92,7 @@ class Player8(Player):
 
 	@staticmethod
 	def compute_bonuses(
-		item: Item, history: list[Item], monotonic_subjects: list[int], preferences: list[int]
+		item: Item, history: list[Item], monotonic_subjects: list[int], preferences: list[int], v
 	) -> list[float]:
 		if not item:  # pause shortcut
 			return [1, 0, 0, 0, 0, 0]
@@ -88,15 +122,17 @@ class Player8(Player):
 		def monotonic_bonus():
 			if not item:
 				return 0
-			return sum(-1 for s in item.subjects if s in monotonic_subjects)
-		
+			return sum(-1 for s in item.subjects if s in monotonic_subjects) + (
+				-1 if item in history else 0
+			)
+
 		return [
-			freshness_bonus() * v[0],
-			coherence_bonus() * v[1],
-			monotonic_bonus() * v[2],
-			repetition_bonus() * v[3],
-			importance_bonus() * v[4],
-			preference_bonus() * v[5],
+			freshness_bonus() * max(0.1, v[0]),
+			coherence_bonus() * max(0.1, v[1]),
+			monotonic_bonus() * max(0.1, v[2]),
+			repetition_bonus() * max(0.1, v[3]),
+			importance_bonus() * max(0.1, v[4]),
+			preference_bonus() * max(0.1, v[5]),
 		]
 
 	@staticmethod
@@ -122,7 +158,7 @@ class Player8(Player):
 		if len(history) >= 3:
 			counter = Counter(Player8.subjects_from_items(history[-3:]))
 			for x, y in counter.items():
-				if y > 2:
+				if y >= 3:
 					monotonic_subjects.append(x)
 		return monotonic_subjects
 
@@ -141,7 +177,7 @@ class Player8(Player):
 	@staticmethod
 	def current_context(history: list[Item]):
 		context_subjects: list[int] = []
-		for i in range(-1, -3, -1):
+		for i in range(-1, -4, -1):
 			if len(history) >= -i and history[i]:
 				for subject in history[i].subjects:
 					context_subjects.append(subject)
@@ -165,17 +201,23 @@ class Player8(Player):
 		return [item for item in items if not len(set(monotonic_subjects) & set(item.subjects))]
 
 	def propose_item(self, history: list[Item]) -> Item | None:
-		if None not in self.memory_bank:
-			self.memory_bank.append(None)
-
 		monotonic_subjects = self.monotonic_subjects(history)
 
 		evaluated_items = [
-			(item, sum(self.compute_bonuses(item, history, monotonic_subjects, self.preferences)))
+			(
+				item,
+				sum(
+					self.compute_bonuses(
+						item, history, monotonic_subjects, self.preferences, self.v
+					)
+				),
+			)
 			for candidate in self.memory_bank
 			if (item := candidate) is not None
 		]
 
 		best_item, best_bonus = max(evaluated_items, key=lambda x: x[1])
 
-		return best_item if best_bonus >= 0 else None
+		if len(history) == 0:
+			return best_item
+		return best_item if best_bonus > 0.5 else None
