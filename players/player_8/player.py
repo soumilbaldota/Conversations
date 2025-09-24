@@ -30,7 +30,7 @@ class Player8(Player):
 			]
 
 		target = (mem, conv_len, num_players)
-		best_key, best_dist = None, float("inf")
+		best_key, best_dist = None, float('inf')
 
 		for key, vec in V_LOOKUP.items():
 			m, c, n = map(int, key.split('_'))
@@ -38,9 +38,7 @@ class Player8(Player):
 
 			# Euclidean distance without numpy
 			dist = math.sqrt(
-				(target[0] - cand[0]) ** 2 +
-				(target[1] - cand[1]) ** 2 +
-				(target[2] - cand[2]) ** 2
+				(target[0] - cand[0]) ** 2 + (target[1] - cand[1]) ** 2 + (target[2] - cand[2]) ** 2
 			)
 
 			if dist < best_dist:
