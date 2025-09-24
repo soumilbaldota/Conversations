@@ -1,11 +1,12 @@
-from collections import Counter
-import math
-from uuid import UUID
-from models.player import GameContext, Item, Player, PlayerSnapshot
-import os
 import json
+import math
+import os
+from collections import Counter
+from uuid import UUID
 
-with open('players/player_8/weights', 'r') as f:
+from models.player import GameContext, Item, Player, PlayerSnapshot
+
+with open('players/player_8/weights') as f:
 	V_LOOKUP = json.load(f)
 
 
@@ -32,7 +33,7 @@ class Player8(Player):
 		target = (mem, conv_len, num_players)
 		best_key, best_dist = None, float('inf')
 
-		for key, vec in V_LOOKUP.items():
+		for key, _ in V_LOOKUP.items():
 			m, c, n = map(int, key.split('_'))
 			cand = (m, c, n)
 

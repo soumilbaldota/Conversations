@@ -1,13 +1,10 @@
-import os
 import json
-import numpy as np
-import subprocess
-from itertools import product
 import os
-import json
-import numpy as np
 import subprocess
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from itertools import product
+
+import numpy as np
 
 
 # ----------------------------
@@ -159,7 +156,7 @@ def train_tournament_scenarios(
 ):
 	# Load or initialize lookup
 	if os.path.exists(output_file):
-		with open(output_file, 'r') as f:
+		with open(output_file) as f:
 			v_lookup = json.load(f)
 	else:
 		v_lookup = {}
@@ -219,7 +216,7 @@ def generate_large_v_lookup(
 	output_file='v_lookup_large.json',
 ):
 	if os.path.exists(output_file):
-		with open(output_file, 'r') as f:
+		with open(output_file) as f:
 			v_lookup = json.load(f)
 	else:
 		v_lookup = {}
